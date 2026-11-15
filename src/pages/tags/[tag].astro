@@ -1,0 +1,24 @@
+---
+import type { GetStaticPaths } from 'astro';
+import Base from '../../layouts/Base.astro';
+import GameCard from '../../components/GameCard.astro';
+import { getVisibleGames, usedTags, type Game } from '../../lib/games';
+
+export const getStaticPaths = (async () => {
+  const games = await getVisibleGames();
+  return usedTags(games).map(({ tag }) => ({
+    params: { tag },
+    props: { tag, games: games.filter((g) => g.data.tags.includes(tag)) },
+  }));
+}) satisfies GetStaticPaths;
+
+const { tag, games } = Astro.props as { tag: string; games: Game[] };
+---
+
+<Base title={`タグ: ${tag}`} description={`「${tag}」タグの付いた SEAP の作品`}>
+  <p class="crumb"><a href="/games/">作品一覧</a> / タグ</p>
+  <h1>{tag}</h1>
+  <ul class="cards">
+    {games.map((g) => <GameCard game={g} />)}
+  </ul>
+</Base>

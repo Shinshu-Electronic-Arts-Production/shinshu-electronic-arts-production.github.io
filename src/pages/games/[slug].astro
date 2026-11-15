@@ -1,0 +1,110 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { Image, getImage } from 'astro:assets';
+import { getEntries, render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import {
+  getVisibleGames,
+  tagUrl,
+  authorUrl,
+  formatDate,
+  PLATFORM_LABEL,
+  type Game,
+} from '../../lib/games';
+
+export const getStaticPaths = (async () => {
+  const games = await getVisibleGames();
+  return games.map((game) => ({ params: { slug: game.id }, props: { game } }));
+}) satisfies GetStaticPaths;
+
+const { game } = Astro.props as { game: Game };
+const { title, summary, cover, screenshots, tags, releasedAt, event, platforms, links, embed } = game.data;
+const authors = await getEntries(game.data.authors);
+const { Content } = await render(game);
+const og = await getImage({ src: cover, width: 1200, format: 'png' });
+
+const buttons = [
+  links.play && { href: links.play, label: 'ブラウザで遊ぶ', primary: true },
+  links.unityroom && { href: links.unityroom, label: 'unityroom で遊ぶ', primary: !links.play },
+  links.download && { href: links.download, label: 'ダウンロード', primary: !links.play && !links.unityroom },
+  links.source && { href: links.source, label: 'ソースコード', primary: false },
+].filter((b): b is { href: string; label: string; primary: boolean } => Boolean(b));
+---
+
+<Base title={title} description={summary} image={og.src}>
+  <article class="game">
+    <header class="game-header">
+      <h1>{title}</h1>
+      <p class="summary">{summary}</p>
+      <p class="meta">
+        {
+          authors.map((a, i) => (
+            <>
+              {i > 0 && '、'}
+              <a href={authorUrl(a.id)}>{a.data.name}</a>
+            </>
+          ))
+        }
+        <span>・{formatDate(releasedAt)}</span>
+        {event && <span>・{event}</span>}
+      </p>
+    </header>
+
+    {
+      embed && links.play ? (
+        <div class="embed">
+          <iframe src={links.play} title={title} allow="fullscreen; autoplay; gamepad" loading="lazy" />
+        </div>
+      ) : (
+        <Image src={cover} alt={`${title} のカバー画像`} widths={[640, 1280]} sizes="(max-width: 960px) 100vw, 960px" class="game-cover" loading="eager" />
+      )
+    }
+
+    <div class="buttons">
+      {
+        buttons.map((b) => (
+          <a class:list={['button', { secondary: !b.primary }]} href={b.href} target="_blank" rel="noopener">
+            {b.label}
+          </a>
+        ))
+      }
+    </div>
+
+    <dl class="info">
+      <dt>対応環境</dt>
+      <dd>{platforms.map((p) => PLATFORM_LABEL[p]).join(' / ')}</dd>
+      {
+        tags.length > 0 && (
+          <>
+            <dt>タグ</dt>
+            <dd>
+              <ul class="tags">
+                {tags.map((t) => (
+                  <li>
+                    <a href={tagUrl(t)}>{t}</a>
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        )
+      }
+    </dl>
+
+    {
+      screenshots.length > 0 && (
+        <section class="screenshots" aria-label="スクリーンショット">
+          {screenshots.map((s, i) => (
+            <a href={s.src} target="_blank">
+              <Image src={s} alt={`スクリーンショット ${i + 1}`} widths={[480, 960]} sizes="(max-width: 640px) 100vw, 480px" />
+            </a>
+          ))}
+        </section>
+      )
+    }
+
+    <div class="prose">
+      <Content />
+    </div>
+  </article>
+</Base>

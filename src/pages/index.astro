@@ -1,0 +1,31 @@
+---
+import Base from '../layouts/Base.astro';
+import GameCard from '../components/GameCard.astro';
+import { getVisibleGames } from '../lib/games';
+
+const games = await getVisibleGames();
+const latest = games.slice(0, 6);
+---
+
+<Base>
+  <section class="hero">
+    <h1>Shinshu Electronic Arts Production</h1>
+    <p>SEAP のメンバーが作った作品を紹介しています。</p>
+    <a class="button" href="/games/">作品一覧へ</a>
+  </section>
+
+  <section>
+    <h2>新着作品</h2>
+    {
+      latest.length > 0 ? (
+        <ul class="cards">
+          {latest.map((g) => (
+            <GameCard game={g} />
+          ))}
+        </ul>
+      ) : (
+        <p class="muted">まだ作品がありません。</p>
+      )
+    }
+  </section>
+</Base>

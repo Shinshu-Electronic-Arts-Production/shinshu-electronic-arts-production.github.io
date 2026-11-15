@@ -1,0 +1,90 @@
+---
+import Base from '../../layouts/Base.astro';
+import GameCard from '../../components/GameCard.astro';
+import { getVisibleGames, usedTags, tagUrl } from '../../lib/games';
+
+const games = await getVisibleGames();
+const tags = usedTags(games);
+---
+
+<Base title="作品一覧">
+  <h1>作品一覧</h1>
+
+  {
+    tags.length > 0 && (
+      <section class="filter" aria-label="タグで絞り込み">
+        <p class="muted">タグで絞り込み（複数選ぶとすべてに当てはまる作品だけ表示）</p>
+        <ul class="tags">
+          {tags.map(({ tag, count }) => (
+            <li>
+              {/* JS が無い環境ではタグページへのリンクとして働く */}
+              <a href={tagUrl(tag)} data-tag={tag} aria-pressed="false">
+                {tag} <span class="count">{count}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <button type="button" class="clear" hidden>絞り込みを解除</button>
+      </section>
+    )
+  }
+
+  {
+    games.length > 0 ? (
+      <ul class="cards" id="game-list">
+        {games.map((g) => (
+          <GameCard game={g} />
+        ))}
+      </ul>
+    ) : (
+      <p class="muted">まだ作品がありません。</p>
+    )
+  }
+  <p class="muted" id="no-match" hidden>条件に合う作品がありません。</p>
+</Base>
+
+<script>
+  // 絞り込みの状態は ?tags=a,b に持たせ、URL で共有できるようにする。
+  const buttons = [...document.querySelectorAll<HTMLAnchorElement>('.filter a[data-tag]')];
+  const cards = [...document.querySelectorAll<HTMLElement>('#game-list > .card')];
+  const clear = document.querySelector<HTMLButtonElement>('.filter .clear');
+  const noMatch = document.getElementById('no-match');
+
+  const params = new URLSearchParams(location.search);
+  const selected = new Set(
+    (params.get('tags') ?? '').split(',').filter((t) => buttons.some((b) => b.dataset.tag === t)),
+  );
+
+  function apply() {
+    let shown = 0;
+    for (const card of cards) {
+      const tags: string[] = JSON.parse(card.dataset.tags ?? '[]');
+      const ok = [...selected].every((t) => tags.includes(t));
+      card.hidden = !ok;
+      if (ok) shown++;
+    }
+    for (const b of buttons) b.setAttribute('aria-pressed', String(selected.has(b.dataset.tag!)));
+    if (clear) clear.hidden = selected.size === 0;
+    if (noMatch) noMatch.hidden = shown > 0 || cards.length === 0;
+
+    const url = new URL(location.href);
+    if (selected.size > 0) url.searchParams.set('tags', [...selected].join(','));
+    else url.searchParams.delete('tags');
+    history.replaceState(null, '', url);
+  }
+
+  for (const b of buttons) {
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      const t = b.dataset.tag!;
+      if (selected.has(t)) selected.delete(t);
+      else selected.add(t);
+      apply();
+    });
+  }
+  clear?.addEventListener('click', () => {
+    selected.clear();
+    apply();
+  });
+  apply();
+</script>

@@ -1,0 +1,74 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { getCollection, getEntries } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import GameCard from '../../components/GameCard.astro';
+import { getVisibleGames, authorUrl, type Author, type Game } from '../../lib/games';
+
+export const getStaticPaths = (async () => {
+  const games = await getVisibleGames();
+  const authors = await getCollection('authors');
+  return (
+    authors
+      .map((author) => {
+        // 個人ページには、その人が入っているチームの作品も並べる
+        const teamIds = authors
+          .filter((a) => a.data.members?.some((m) => m.id === author.id))
+          .map((a) => a.id);
+        const ids = new Set([author.id, ...teamIds]);
+        return {
+          params: { id: author.id },
+          props: { author, games: games.filter((g) => g.data.authors.some((a) => ids.has(a.id))) },
+        };
+      })
+      // 公開作品の無い作者のページは作らない
+      .filter((p) => p.props.games.length > 0)
+  );
+}) satisfies GetStaticPaths;
+
+const { author, games } = Astro.props as { author: Author; games: Game[] };
+const { name, kind, github, x } = author.data;
+const members = author.data.members ? await getEntries(author.data.members) : [];
+const teams = (await getCollection('authors')).filter((a) =>
+  a.data.members?.some((m) => m.id === author.id),
+);
+---
+
+<Base title={name} description={`${name} の作品`}>
+  <p class="crumb"><a href="/games/">作品一覧</a> / {kind === 'team' ? 'チーム' : '作者'}</p>
+  <h1>{name}</h1>
+  <ul class="links-inline">
+    {github && <li><a href={`https://github.com/${github}`} target="_blank" rel="noopener">GitHub</a></li>}
+    {x && <li><a href={`https://x.com/${x}`} target="_blank" rel="noopener">X</a></li>}
+  </ul>
+  {
+    members.length > 0 && (
+      <p>
+        メンバー：
+        {members.map((m, i) => (
+          <>
+            {i > 0 && '、'}
+            <a href={authorUrl(m.id)}>{m.data.name}</a>
+          </>
+        ))}
+      </p>
+    )
+  }
+  {
+    teams.length > 0 && (
+      <p>
+        所属チーム：
+        {teams.map((t, i) => (
+          <>
+            {i > 0 && '、'}
+            <a href={authorUrl(t.id)}>{t.data.name}</a>
+          </>
+        ))}
+      </p>
+    )
+  }
+  <h2>作品</h2>
+  <ul class="cards">
+    {games.map((g) => <GameCard game={g} />)}
+  </ul>
+</Base>
