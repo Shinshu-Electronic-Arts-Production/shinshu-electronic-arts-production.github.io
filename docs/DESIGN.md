@@ -30,7 +30,7 @@ Twitter（X）の固定ポストから飛べる「作品の入口」を、GitHub
 | 分類 | タグ（許可リスト制）+ 作者。ジャンル別ページは作らない |
 | 登録方法 | ① PR（Git が分かる人）② private の窓口リポジトリ `seap-submissions` の Issue Form → Actions が本体サイトに PR を自動生成（Git が分からない人） |
 | 掲載可否 | main へのマージ = 公開。CODEOWNERS（幹部 Team）の承認必須 |
-| Discord 連携 | **後回し**（[将来拡張](#将来拡張-discord-から登録)）。discord_github_authbot の紐付けを使う想定 |
+| Discord 連携 | **後回し**（[将来拡張](#将来拡張-discord-から登録)）。authbot にコマンドを足し、初期値入りの Issue Form のリンクを返すだけにする想定 |
 | Cloudflare / Vercel | 使わない（管理アカウントが増える。Cloudflare Pages は 1 ファイル 25 MiB 上限で Unity の `.data` が載らないことがある） |
 
 ## 全体構成
@@ -296,26 +296,35 @@ shinshu-electronic-arts-production.github.io（public）に PR → ① と同じ
 
 ## 将来拡張: Discord から登録
 
-discord_github_authbot は Discord アカウントと GitHub アカウントを 1:1 で紐付けている。
-これを使えば「Discord でコマンドを打った人 = 本人確認済みの SEAP メンバー」として、Discord から登録できる。
+Discord の Bot は **登録そのものは行わず、②の Issue Form への入口を案内するだけ** にする。
+コマンドで受け取った値を初期値として入れた `seap-submissions` の Issue 作成画面のリンクを返し、
+以降は ② と同じ流れ（Issue → `issue-to-pr.yml` → PR → レビュー）に乗せる。
 
 ```
-/publish cover:<画像> build:<zip 任意>
+/publish title:<タイトル> slug:<slug 任意> summary:<一行紹介 任意>
   → 紐付け済みか確認（未登録なら /join を案内）
-  → モーダル（タイトル / slug / タグ / 紹介文 / URL）
-  → deferred 応答で 3 秒制限を回避し、waitUntil で:
-       ブランチ作成 → index.md・画像をコミット → PR 作成（本文に Discord @A ↔ GitHub @B）
-       ログチャンネルに PR リンク、本人に「レビュー待ち」
-  → マージ → デプロイ完了をワークフローから Discord webhook で通知
+  → 初期値入りの Issue 作成画面のリンクを本人にだけ（ephemeral で）返す
+       https://github.com/Shinshu-Electronic-Arts-Production/seap-submissions/issues/new
+         ?template=add-game.yml&title=<タイトル>&slug=<slug>&summary=<一行紹介>
+  → 本人がリンク先で残りの項目・画像を入力して Issue を作成
+  → 以降は ② と同じ
 ```
 
-- **authbot とは別の Worker・別の GitHub App にする。** authbot は「GitHub App の権限は Members のみ」という設計なので、
-  Contents / Pull requests（作品リポジトリを作るなら Administration）を足さない。
-  紐付けは authbot の D1 を読み取り専用でバインドするか、authbot に Service Binding で照会口を 1 つ足す。
-- Discord の添付は無料ユーザーで 10 MB まで。小さい zip だけ Bot が Release に上げ、大きいものは作品リポジトリの
-  Release アップロード画面へのリンクを返す。
-- 既存作品の修正（`/publish edit slug:`）は、その作品の `authors` に本人の GitHub が入っている場合のみ許可する。
-- Issue Form（②）は Discord 連携ができた後も残す（Discord を使わない人・障害時の代替）。
+- **Bot は GitHub に書き込まない。** ブランチ・コミット・PR は `issue-to-pr.yml` が作るため、Bot 用の GitHub App も
+  書き込み権限も要らない。authbot の「GitHub App の権限は Members のみ」という設計を崩さずに、
+  authbot にコマンドを 1 つ足すだけで実装できる（別の Worker にする必要もない）。
+- **本人確認は GitHub 側で行われる。** `seap-submissions` は private なので、リンク先で Issue を作れた時点で Org メンバー。
+  Bot での紐付け確認は「未登録なら `/join` を案内する」ための親切であって、セキュリティ上の境界ではない。
+- 画像は Issue に直接貼ってもらうので、Discord の添付サイズ制限（無料ユーザー 10 MB）や
+  Interaction の 3 秒制限（deferred 応答）を気にしなくてよい。ブラウザ版・DL 版のビルドは ② と同じく作品リポジトリの Release に上げてもらう。
+- 既存作品の修正は、元の Issue を編集してもらう（`issue-to-pr.yml` が同じ PR を更新する）。
+  Bot で扱う場合も、その Issue へのリンクを返すだけにする。
+- 初期値の受け渡しは Issue Form のクエリパラメータ（フィールドの `id` = 値）で行う。
+  - 初期値を入れられるのはテキスト入力系（`input` / `textarea`）。タグのチェックボックス・ドロップダウンに入れられるかは **要検証**。
+  - URL の長さ制限があるので、紹介文などの長い本文は Bot では受け取らず、リンク先のフォームで書いてもらう。
+  - 値は URL エンコードする。Bot で受け取った値を信用しない点は ② と同じ（検証は `issue-to-pr.yml` と zod で行う）。
+- リンク先では GitHub へのログインが必要（authbot で紐付け済みのメンバーならアカウントは持っている）。
+- 任意：公開・デプロイ完了をワークフローから Discord の webhook でログチャンネルに通知する。
 
 ## 未決事項
 
